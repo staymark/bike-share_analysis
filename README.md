@@ -1,6 +1,6 @@
 # bike-share_analysis
 
-The following analysis uses data from [here](https://divvy-tripdata.s3.amazonaws.com/index.html).
+The analysis uses data from [here](https://divvy-tripdata.s3.amazonaws.com/index.html).
 
 Datasets include:
 * 202207-divvy-tripdata
