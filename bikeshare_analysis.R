@@ -2,11 +2,12 @@
 # https://divvy-tripdata.s3.amazonaws.com/index.html
 # 202207-divvy-tripdata to 202307-divvy-tripdata
 
+# setup-------------------------------------------------------------------------
+
 # load packages
 library(tidyverse)
-library(hms)
 
-# cleaning ----------------------------------------------------------------
+# cleaning ---------------------------------------------------------------------
 
 # load and merge data raw data
 july_2022 <- read_csv("202207-divvy-tripdata.csv")
@@ -38,9 +39,6 @@ View(combined_data)
 combined_data <- rename(combined_data, 'user_type' = 'member_casual')
 colnames(combined_data)
 
-# format 'started_at' and 'ended_at' columns
-combined_data$started_at <- ymd_hms(combined_data$started_at)
-combined_data$ended_at <- ymd_hms(combined_data$ended_at)
 
 # add 'day' column
 combined_data <- combined_data %>% 
@@ -69,97 +67,115 @@ min(combined_data$ride_length)
 max(combined_data$ride_length)
 
 # looking for negative ride lengths 
-weird_min <- filter(combined_data, ride_length < 0)
-werid_min
+neg_ride_lengths <- filter(combined_data, ride_length < 0)
+neg_ride_lengths
 
 # looking for extremely long ride lengths (longer than 1 day) (1 day = 1440 min)
-weird_max <- filter(combined_data, ride_length > 1440)
-weird_max
+long_ride_lengths <- filter(combined_data, ride_length > 1440)
+long_ride_lengths
 
 # remove ride lengths longer that are negative or longer than 1 day
-combined_data_subset <- subset(combined_data, ride_length > 0 
+subset_data <- subset(combined_data, ride_length > 0 
                                & ride_length < 1440)
-min(combined_data$ride_length)
-max(combined_data$ride_length)
+min(subset_data$ride_length)
+max(subset_data$ride_length)
 
 # how many people keep bikes longer than a day?
 
 #greater_than_1_day <- combined_data %>% 
-  group_by(user_type) %>% 
-  filter(ride_length > 1440) %>% 
-  summarize(n = n())
+#  group_by(user_type) %>% 
+#  filter(ride_length > 1440) %>% 
+#  summarize(n = n())
 
 #greater_than_2_days <- combined_data %>% 
-  group_by(user_type) %>% 
-  filter(ride_length > 2880) %>% 
-  summarize(n = n())
+#  group_by(user_type) %>% 
+#  filter(ride_length > 2880) %>% 
+# summarize(n = n())
 
 #greater_than_3_days <- combined_data %>% 
-  group_by(user_type) %>% 
-  filter(ride_length > 4320) %>% 
-  summarize(n = n())
+#  group_by(user_type) %>% 
+#  filter(ride_length > 4320) %>% 
+#  summarize(n = n())
   
 # casuals made up for majority of bikes that had timers running for longer than
 # a day. no members kept bikes longer than 2 days. therefore, members are not 
 # just holding onto the same bike as i thought might be the case. casuals might
 # not know how to properly end sessions or properly return bikes to stations.
 # i feel comfortable leaving ride lengths that are greater than 0 min and less
-# than 1440 min in the analysis
+# than 1440 min in the analysis.
 
-# export 'combined_data' as a csv for future use
+# export data as a csv for future use
 # (don't forget to add file title at the end of path)
 # write_csv(combined_data, "/ENTER FILE PATH HERE/combined_data.csv")
-write_csv(combined_data, "/Users/marknival/Desktop/Analytics/Bikeshare_Case_Study/combined_data.csv")
-write_csv(combined_data_subset, "/Users/marknival/Desktop/Analytics/Bikeshare_Case_Study/combined_data_subset.csv")
+# write_csv(subset_data, "/ENTER FILE PATH HERE/subset_data.csv")
+
 # analysis ---------------------------------------------------------------------
 
 # load cleaned data if necessary
 # combined_data <- read_csv("combined_data.csv")
+# subset_data <- read_csv("subset_data.csv")
 
-# business question: how do members and casuals differ in their usage of the bikes?
+# business question: 
+# how do members and casuals differ in their usage of the bikes?
 
 # mean ride length
-mean_ride_length <- combined_data_subset %>% 
+mean_ride_length <- subset_data %>% 
   aggregate(x = ride_length ~ user_type, FUN = mean)
 mean_ride_length
+# on average, casuals ride for longer.
 
 # mean ride length per day
-mrl_per_day <- combined_data_subset %>% 
+mrl_per_day <- subset_data %>% 
   aggregate(x = ride_length ~ user_type + day, FUN = mean)
+mrl_per_day
+# both members and casuals seem to ride a little bit longer on the weekends
+# compared to the weekdays.
 
 # number of rides per day
-rides_per_day <- combined_data_subset %>%
+rides_per_day <- subset_data %>%
   group_by(day, user_type) %>%  
   summarize(n = n())
+rides_per_day
+# always more members than casuals.
+
+# summary 
+ride_summary <- subset_data %>% 
+  group_by(day, user_type) %>% 
+  summarize(num_of_rides = n(), avg_ride_length = mean(ride_length))
+ride_summary
+
 # although there are always more members than casuals the disparity between the
 # two is much larger on the weekdays than the weekends. this indicates that 
 # casuals are much more likely to use the bikes on the weekends than the 
-# weekdays
+# weekdays.
 
 # number of rides - weekends
-rides_per_wend <- combined_data_subset %>% 
+rides_per_wend <- subset_data %>% 
   group_by(user_type) %>% 
   filter(day == "Sun" | day == "Sat") %>% 
   summarize(n = n())
+rides_per_wend
 
 # percentage of total rides belonging to casuals - weekends
-wend_diff <- (939092 / (975318 + 939092)) * 100
+wend_diff >- (min(rides_per_wend$n) / 
+                (max(rides_per_wend$n) + min(rides_per_wend$n))) * 100
 wend_diff
-# on weekends, casuals made up 49% of the total rides
+# on weekends, casuals made up about 49% of the total rides.
+
 
 # number of rides - weekdays
-rides_per_wday <- combined_data_subset %>% 
+rides_per_wday <- subset_data %>% 
   group_by(user_type) %>% 
   filter(day %in% c("Mon","Tue","Wed","Thu","Fri")) %>% 
   summarize(n = n())
+rides_per_wday
 
 # percentage of total rides belonging to casuals - weekdays
-wkday_diff <- (1630932 / (2994814 + 1630932)) * 100
+wkday_diff <- (min(rides_per_wday$n)) / 
+                (max(rides_per_wday$n) + min(rides_per_wday$n)) * 100
 wkday_diff
-# on weekdays, casuals make up only about 35% of the total rides. therefore,
-# casuals are much more likely to bike on the weekends
+# on weekdays, casuals made up about 35% of the total rides.
 
-# summary 
-ride_summary <- combined_data_subset %>% 
-  group_by(day, user_type) %>% 
-  summarize(num_of_rides = n(), avg_ride_length = mean(ride_length))
+# on weekdays, casuals make up only about 35% of the total rides. however,
+# on the weekends, casuals make up 49% of the total rides. therefore, casuals 
+# are much more likely to bike on the weekends
