@@ -39,7 +39,6 @@ View(combined_data)
 combined_data <- rename(combined_data, 'user_type' = 'member_casual')
 colnames(combined_data)
 
-
 # add 'day' column
 combined_data <- combined_data %>% 
   mutate(day = wday(as.Date(started_at), label = TRUE), .before = started_at)
@@ -54,6 +53,10 @@ combined_data <- combined_data %>%
                ordered = TRUE)
              )
          , .after = day)
+
+# add 'month' column
+combined_data <- combined_data %>%
+    mutate(month = month(started_at, label = TRUE, abbr = TRUE), .after = rideable_type)
 
 # add 'ride_length' column
 combined_data <- combined_data %>% 
@@ -157,7 +160,7 @@ rides_per_wend <- subset_data %>%
 rides_per_wend
 
 # percentage of total rides belonging to casuals - weekends
-wend_diff >- (min(rides_per_wend$n) / 
+wend_diff <- (min(rides_per_wend$n) / 
                 (max(rides_per_wend$n) + min(rides_per_wend$n))) * 100
 wend_diff
 # on weekends, casuals made up about 49% of the total rides.
@@ -179,3 +182,14 @@ wkday_diff
 # on weekdays, casuals make up only about 35% of the total rides. however,
 # on the weekends, casuals make up 49% of the total rides. therefore, casuals 
 # are much more likely to bike on the weekends
+
+# bike usage by month
+rides_per_month <- subset_data %>% 
+    group_by(month, user_type) %>% 
+    summarize(rides = n())
+rides_per_month
+
+# We see that bike usage starts increasing during spring, peaks during the 
+# summer months, and eventually reaches lows during the winter. This 
+# information can help us determine the best time throughout the year to push 
+# marketing campaigns.
