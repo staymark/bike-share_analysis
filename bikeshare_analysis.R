@@ -116,7 +116,7 @@ max(subset_data$ride_length)
 
 # load cleaned data if necessary
 # combined_data <- read_csv("combined_data.csv")
-# subset_data <- read_csv("subset_data.csv")
+subset_data <- read_csv("subset_data.csv")
 
 # business question: 
 # how do members and casuals differ in their usage of the bikes?
@@ -193,3 +193,32 @@ rides_per_month
 # summer months, and eventually reaches lows during the winter. This 
 # information can help us determine the best time throughout the year to push 
 # marketing campaigns.
+
+
+# visualizations----------------------------------------------------------------
+
+# average ride length plot
+subset_data %>% 
+    group_by(day, user_type) %>% 
+    summarize(avg_ride_length = mean(ride_length, na.rm = TRUE)) %>% 
+    ggplot(aes(x = factor(day, level = c('Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat')), 
+               y = avg_ride_length, fill = user_type)) +
+    geom_col(position = "dodge") + 
+    labs(title = "Average ride length per day for bike share users",
+         x = "Day",
+         y = "Average ride length (minutes)",
+         fill = "User type"
+         )
+
+# number of rides plot
+subset_data %>% 
+    group_by(day, user_type) %>%
+    summarize(rides = n()) %>% 
+    ggplot(aes(x = factor(day, level = c('Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat')),
+               y = rides, fill = user_type)) +
+    geom_col(position = "dodge") +
+    labs(title = "Number of rides per day for bike share users",
+         x = "Day",
+         y = "Rides",
+         fill = "User type"
+         )
