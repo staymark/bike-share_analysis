@@ -1,0 +1,340 @@
+---
+title: "Bike Share Analysis"
+author: "Mark N."
+execute: 
+  warning: false
+toc: true
+format:
+    html:
+        embed-resources: true
+editor: visual
+---
+
+## Introduction
+
+This report is based on a case study from the [Google Data Analytics course](https://www.coursera.org/professional-certificates/google-data-analytics). The scenario is the following:
+
+> You are a junior data analyst working in the marketing analyst team at Cyclistic, a bike-share company in Chicago. The director of marketing believes the company's future success depends on maximizing the number of annual memberships. Therefore, your team wants to understand how casual riders and annual members use Cyclistic bikes differently. From these insights, your team will design a new marketing strategy to convert casual riders into annual members. But first, Cyclistic executives must approve your recommendations, so they must be backed up with compelling data insights and professional data visualizations.
+
+The business question we want to answer is...
+
+> How do annual members and casual riders use Cyclistic bikes differently?
+
+## Data
+
+The data can be accessed [here](https://divvy-tripdata.s3.amazonaws.com/index.html). This report includes data from the past 12 months (July 2022 to July 2023).
+
+### Setup
+
+Most of the work completed will be done using R. However, official visualizations will be made using Tableau.
+
+The first thing we want to do is load the necessary packages to work with the data efficiently.
+
+```{r}
+#| label: setup
+
+library(tidyverse)
+library(scales)
+```
+
+The data for each month has been downloaded separately, so it must first be loaded into R and combined.
+
+```{r}
+#| label: load data
+
+july_2022 <- read_csv("202207-divvy-tripdata.csv")
+august_2022 <- read_csv("202208-divvy-tripdata.csv")
+september_2022 <- read_csv("202209-divvy-tripdata.csv")
+october_2022 <- read_csv("202210-divvy-tripdata.csv")
+november_2022 <- read_csv("202211-divvy-tripdata.csv")
+december_2022 <- read_csv("202212-divvy-tripdata.csv")
+january_2023 <- read_csv("202301-divvy-tripdata.csv")
+february_2023 <- read_csv("202302-divvy-tripdata.csv")
+march_2023 <- read_csv("202303-divvy-tripdata.csv")
+april_2023 <- read_csv("202304-divvy-tripdata.csv")
+may_2023 <- read_csv("202305-divvy-tripdata.csv")
+june_2023 <- read_csv("202306-divvy-tripdata.csv")
+july_2023 <- read_csv("202307-divvy-tripdata.csv")
+combined_data <- rbind(july_2022, august_2022, september_2022, 
+                       october_2022, november_2022, december_2022, 
+                       january_2023, february_2023, march_2023, april_2023, 
+                       may_2023, june_2023, july_2023)
+```
+
+Before doing anything with the data, it's helpful to gain a basic understanding of each column by running any of the following functions.
+
+```{r}
+#| label: understanding
+
+# any of the following are helpful to get a brief understanding of the data's structure
+str(combined_data)
+# head(combined_data)
+# colnames(combined_data)
+# glimpse(combined_data)
+# View(combined_data)
+```
+
+### Wrangling
+
+There are several things that can be done to make the data easier to use during analysis.
+
+1\. Rename *member_casual* to *user_type*.
+
+This clarifies what the column variable actually is instead of simply stating the two options its values can take on.
+
+```{r}
+#| label: clean-1
+
+# rename member_casual for clarity
+combined_data <- combined_data %>% 
+    rename('user_type' = 'member_casual')
+```
+
+2\. Add *day* column.
+
+Grouping the data by day is one way to look into the data deeper.
+
+```{r}
+#| label: clean-2
+
+combined_data <- combined_data %>% 
+    mutate(day = wday(as.Date(started_at), label = TRUE), .before = started_at)
+```
+
+3\. Add *day_number* column.
+
+This might be more useful during analysis if a function we want to run has trouble with strings.
+
+```{r}
+#| label: clean-3
+
+combined_data <- combined_data %>% 
+    mutate(day_number = as.integer(factor(combined_data$day, levels = c("Sun","Mon","Tue","Wed","Thu","Fri","Sat"), ordered = TRUE)), .after = day)
+```
+
+4\. Add *month* column.
+
+Similar to the *day* column, grouping data by month allows us to look at bigger pictuure trends.
+
+```{r}
+#| label: clean-4
+
+combined_data <- combined_data %>%
+    mutate(month = month(started_at, label = TRUE, abbr = TRUE), .after = rideable_type)
+```
+
+5\. Add *ride_length* column.
+
+Based on the data that we have, one way to track differences in riding behavior is to look at ride duration. The data does not explicitly include this information, but we can calculate it based on the times that a ride starts and ends.
+
+```{r}
+#| label: clean-5
+
+combined_data <- combined_data %>% 
+    mutate(ride_length = difftime(ended_at, started_at, units = "mins"), .after = ended_at)
+```
+
+6\. Check for unusual data points.
+
+It is important to make sure that the data we are working with makes sense. Data collection is not always perfect, and since the dataset is relatively large, it would not be surprising to find values that do not seem quite right. We can quickly check for interesting values by calculating the minimum and maximum values of one of the key metrics we want to focus on--the length of a ride. Negative ride lengths would mean that the recorded end time of a ride occurred before the recorded start time of a ride. This is obviously impossible and is probably due to bugs/glitches in a bike's tracking system. Long ride lengths could be the product of bugs/glitches, but can also be explained by users not correctly ending a session. In this case, a bike's timer would be left running. Data points such as these could end up skewing the results of our analysis.
+
+```{r}
+#| label: clean-6
+
+# min ride length
+min(combined_data$ride_length)
+
+# max ride length
+max(combined_data$ride_length)
+```
+
+7\. Deal with unusual data points.
+
+Step 6 showed that there is at least one negative value and at least one extremely large value for ride length. This indicates that there could be more values like this. Therefore, it is important to look into the extent of these data points and deal with them accordingly. We can filter the dataset for rows where ride length is negative or longer than 1 day (1440 min). Ride durations longer than even half-a-day might seem weird. But to avoid being too stringent, we'll keep it at 1 day.
+
+```{r}
+#| label: clean-7a
+
+# looking for negative ride lengths 
+neg_ride_lengths <- filter(combined_data, ride_length < 0)
+glimpse(neg_ride_lengths)
+
+# looking for extremely long ride lengths (longer than 1 day) (1 day = 1440 min)
+long_ride_lengths <- filter(combined_data, ride_length > 1440)
+glimpse(long_ride_lengths)
+```
+
+After filtering the data, there are 137 rows where ride length is negative and 6151 rows where ride length is longer than a day. These data points can be excluded to prevent the analysis from possibly being skewed.
+
+```{r}
+#| label: clean-7b
+
+subset_data <- subset(combined_data, ride_length > 0 & ride_length < 1440)
+```
+
+## Analysis
+
+Before doing any analysis, it's important to remember the business task. We want to answer the following:
+
+> How do annual members and casual riders use Cyclistic bikes differently?
+
+We want to look at differences between the two groups, so most of the functions we run should be aggregated accordingly.
+
+A good place to start the analysis is to look at the average ride duration for each group.
+
+```{r}
+#| label: avg-rl
+
+avg_ride_length <- subset_data %>% 
+    group_by(user_type) %>% 
+    summarize(avg_rl = mean(ride_length, na.rm = TRUE))
+
+avg_ride_length
+```
+
+Here, we see that casuals ride almost 9 minutes longer than members on average. This is interesting, but we can be even more specific. Let's see how this tracks for each day of the week.
+
+```{r}
+#| label: avg-rl-day
+
+avg_rl_per_day <- subset_data %>% 
+    group_by(day, user_type) %>% 
+    summarize(avg_rl = mean(ride_length, na.rm = TRUE))
+
+avg_rl_per_day
+```
+
+This indicates that casuals seem to ride longer than members, on average, for every day of the week. Further, we also see that, for both casuals and members, the average length of rides increases slightly on the weekends compared to weekdays.
+
+Aside from ride duration, we can also look at the number of rides being taken by casuals and members.
+
+```{r}
+#| label: rides-total
+
+num_of_rides <- subset_data %>% 
+    group_by(user_type) %>% 
+    summarize(rides = n())
+
+num_of_rides
+```
+
+We see that members have taken more rides than casuals. This is good to know, but it does not tell us anything specific enough to be helpful in answering our business question. What if we look at numbers of rides taken for each day of the week?
+
+```{r}
+#| label: rides-per-day
+
+rides_per_day <- subset_data %>% 
+    group_by(day, user_type) %>% 
+    summarize(rides = n())
+
+rides_per_day
+```
+
+Although members have taken more rides than casuals for every day of the week, the disparity seems to decrease on Saturday and Sunday (weekend). We can look into this a little bit further.
+
+First, let's look at the percentage of rides belonging to casuals on weekdays.
+
+```{r}
+#| label: rides-wdays
+
+# number of rides - weekdays
+rides_per_wday <- subset_data %>% 
+  group_by(user_type) %>% 
+  filter(day %in% c("Mon","Tue","Wed","Thu","Fri")) %>% 
+  summarize(n = n())
+
+rides_per_wday
+
+# percentage of total rides belonging to casuals - weekdays
+wkday_diff <- (min(rides_per_wday$n)) / 
+                (max(rides_per_wday$n) + min(rides_per_wday$n)) * 100
+
+wkday_diff
+```
+
+We see that on weekdays, casuals make up about 35% of the total rides. What about on the weekends?
+
+```{r}
+#| label: rides-wends
+
+# number of rides - weekends
+rides_per_wend <- subset_data %>% 
+  group_by(user_type) %>% 
+  filter(day == "Sun" | day == "Sat") %>% 
+  summarize(n = n())
+
+rides_per_wend
+
+# percentage of total rides belonging to casuals - weekends
+wend_diff <- (min(rides_per_wend$n) / 
+                (max(rides_per_wend$n) + min(rides_per_wend$n))) * 100
+
+wend_diff
+```
+
+During the weekend, casuals make up about 49% of the total rides taken. This is a 14% increase compared to weekdays. This difference indicates that casuals are more likely to ride on the weekend.
+
+Lastly, we can look into how the number of rides varies by month. We can create a quick plot to get a better idea of the trends occurring month-to-month.
+
+```{r}
+#| label: rides-per-month
+
+# rides per month
+rides_per_month <- subset_data %>% 
+    group_by(month, user_type) %>% 
+    summarize(rides = n())
+
+# rides per month plot
+subset_data %>% 
+    group_by(month, user_type) %>%
+    summarize(rides = n()) %>%
+    ggplot(aes(x = factor(month, level = c('Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec')), 
+               y = rides, fill = user_type)) +
+    geom_col(position = "dodge") +
+    scale_y_continuous(labels = scales::comma) +
+    labs(title = "Number of rides per month for bike share users",
+         x = "Month",
+         y = "Rides",
+         fill = "User type"
+         )
+```
+
+We see that, for both casuals and members, bike usage starts increasing during spring, peaks during the summer months, and eventually reaches lows during the winter. This information can help us determine the best time throughout the year to push marketing campaigns.
+
+## Findings
+
+The following visualizations have been made using Tableau.
+
+![](visualizations/fig_1_avg_ride_length_day.png){fig-align="center"}
+
+**Figure 1**. Average ride length per day.
+
+-   On average, casuals ride longer than members every single day of the week.
+
+-   During weekdays (Mon-Fri), members' average ride length is very consistent. However, for casuals, average ride duration decreases and reaches a low on Wednesdays. Then, it rises into the weekend. This observation is likely due to the fact that members use the bikes to commute to work while casuals use them to tour the city.
+
+![](visualizations/fig_2_rides_day.png){fig-align="center"}
+
+**Figure 2**. Number of rides per day.
+
+-   Members ride more often than casuals for every day of the week.
+
+![](visualizations/fig_3_percent_total_rides.png){fig-align="center"}
+
+**Figure 3**. Percentage of rides for weekdays vs weekends for bike share users.
+
+-   Casuals are much more likely to ride on weekends than weekdays.
+
+![](visualizations/fig_4_rides_month_all.png){fig-align="center"}
+
+**Figure 4**. Number of rides per month.
+
+-   Bike usage is at its lowest during the winter and peaks during the summer. This is likely due to seasonal changes in weather. This trend holds true even when the data is divided into casuals and members.
+
+## Recommendations
+
+1\. Run weekend promotional campaigns that offer a discounted price for full-time membership. Casuals are much more likely to ride on the weekend so this will ensure that marketing reach is maximized.
+
+2\. Offer a membership tier for weekends only. Although members use their bikes consistently throughout the week, casuals favor weekends.
+
+3\. Focus these marketing campaigns during the spring and summer when bike usage rises into its peak.
